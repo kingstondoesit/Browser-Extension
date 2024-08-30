@@ -12,7 +12,7 @@ const fossilfuel = document.querySelector('.fossil-fuel'); // An element to disp
 const myregion = document.querySelector('.my-region'); // An element to display the region name for which data is fetched
 const clearBtn = document.querySelector('.clear-btn'); // A button to clear the current region and reset the form
 
-// Initialize function to check for any stored data and set up the initial state
+// Initialize the app based on stored data
 const init = () => {
   // Retrieve the stored API key and region name from localStorage
   const storedApiKey = localStorage.getItem('apiKey');
@@ -33,18 +33,16 @@ const init = () => {
       apiKey.value = storedApiKey;
     }
   } else {
-    // If both API key and region are stored, display results by calling the API
-    displayCarbonUsage(storedApiKey, storedRegion);
-    results.style.display = 'none';
-    form.style.display = 'none';
+    // Set up user data if both API key and region are stored
     clearBtn.style.display = 'block';
+    setUpUser(storedApiKey, storedRegion);
   }
 };
 
 // Reset the form, clearing only the region and retaining the API key
 const reset = (e) => {
   e.preventDefault();
-   // Remove the region name from localStorage while keeping the API key
+  // Remove the region name from localStorage while keeping the API key
   localStorage.removeItem('regionName');
 
   // Optionally reset the region input field, but leave the API key as is
@@ -56,64 +54,72 @@ const reset = (e) => {
 
 // Store the user's API key and region in localStorage and initiate data fetch
 const setUpUser = (apiKey, regionName) => {
-  localStorage.setItem('apiKey', apiKey); // Store the API key
-  localStorage.setItem('regionName', regionName); // Store the region name
-  loading.style.display = 'block'; // Show the loading spinner
-  errors.textContent = ''; // Clear any previous error messages
-  clearBtn.style.display = 'block'; // Show the clear button to allow resetting
-  // Fetch and display carbon usage data based on user input
+  localStorage.setItem('apiKey', apiKey);
+  localStorage.setItem('regionName', regionName);
+  loading.style.display = 'block';
+  errors.textContent = '';
+  clearBtn.style.display = 'block';
   displayCarbonUsage(apiKey, regionName);
 };
 
-// Handle the form submission, storing user input and triggering data fetch
+// Handle form submission
 const handleSubmit = (e) => {
-  e.preventDefault(); // Prevent the default form submission behavior
-  setUpUser(apiKey.value, region.value); // Set up user input and initiate the process
+  e.preventDefault();
+  setUpUser(apiKey.value, region.value);
 };
 
-// Fetch and display carbon usage data from the API based on API key and region
-import axios from '../node_modules/axios'; // Import Axios for making HTTP requests
+// Fetch and display carbon usage and zone name data
+import axios from 'axios'; // Import Axios for HTTP requests
+
 const displayCarbonUsage = async (apiKey, region) => {
   try {
-    // Make an API request to fetch the latest carbon usage data
-    await axios
-      .get('https://api.co2signal.com/v1/latest', {
-        params: {
-          countryCode: region, // Pass the region as a query parameter
-        },
-        headers: {
-          'auth-token': apiKey, // Include the API key in the request header
-        },
-      })
-      .then((response) => {
-        // Extract carbon intensity data from the response
-        let CO2 = response.data.data.carbonIntensity;
-        
-        // Extract fossil fuel data from response
-        let fuelPercentage = response.data.data.fossilFuelPercentage;
+    // Fetch carbon usage data
+    const carbonResponse = await axios.get(
+      'https://api.co2signal.com/v1/latest',
+      {
+        params: { countryCode: region },
+        headers: { 'auth-token': apiKey },
+      }
+    );
 
-        // Hide the loading spinner and form, show the result
-        loading.style.display = 'none';
-        form.style.display = 'none';
-        myregion.textContent = region; // Display the region name
-        usage.textContent =
-          Math.round(CO2) + ' grams (C02 emitted per kilowatt hour)'; // Display carbon usage
-        fossilfuel.textContent =
-          fuelPercentage.toFixed(2) +
-          '% (percentage of fossil fuels used to generate electricity)'; // Display fossil fuel percentage
-        results.style.display = 'block'; // Show the result container
-      });
+    // Extract data from response
+    const CO2 = carbonResponse.data.data.carbonIntensity;
+    const fuelPercentage = carbonResponse.data.data.fossilFuelPercentage;
+
+    // Fetch zone name data
+    const zoneResponse = await axios.get(
+      'https://api.electricitymap.org/v3/zones'
+    );
+    const zoneData = zoneResponse.data;
+
+    // Determine zone display name
+    const zoneInfo = zoneData[region] || {};
+    const displayName = zoneInfo.countryName
+      ? `${zoneInfo.countryName} - ${zoneInfo.zoneName}`
+      : zoneInfo.zoneName || region;
+
+    // Update UI with results
+    loading.style.display = 'none';
+    form.style.display = 'none';
+    myregion.textContent = displayName;
+    usage.textContent = `${Math.round(
+      CO2
+    )} grams (CO2 emitted per kilowatt hour)`;
+    fossilfuel.textContent = `${fuelPercentage.toFixed(
+      2
+    )}% (percentage of fossil fuels used to generate electricity)`;
+    results.style.display = 'block';
+    
   } catch (error) {
-    // Handle errors by logging and displaying a message to the user
-    console.log(error);
+    // Handle errors and update UI
+    console.error('Error fetching data:', error);
     loading.style.display = 'none';
     results.style.display = 'none';
-    errors.textContent =
-      'Sorry, we have no data for the region you have requested.';
+    errors.textContent = `Sorry, we have no data for the region: ${region}.`;
   }
 };
 
 // Set event listeners for form submission and reset button click
-form.addEventListener('submit', (e) => handleSubmit(e)); // Handle form submission
-clearBtn.addEventListener('click', (e) => reset(e)); // Handle reset button click
+form.addEventListener('submit', (e) => handleSubmit(e));
+clearBtn.addEventListener('click', (e) => reset(e));
 init(); // Initialize the app when the script loads
